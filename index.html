@@ -1575,6 +1575,13 @@ function renderEntryLog() {
 
   const container = document.getElementById('dateWiseLog');
   if (!container) return;
+  // Use event delegation - handle edit/delete button clicks
+  container.onclick = function(ev) {
+    const editBtn = ev.target.closest('[data-editid]');
+    const delBtn  = ev.target.closest('[data-delid]');
+    if (editBtn) openEdit(editBtn.getAttribute('data-editid'));
+    if (delBtn)  removeEntry(delBtn.getAttribute('data-delid'));
+  };
 
   if (!filtered.length) {
     container.innerHTML = `<div style="text-align:center;color:var(--text3);padding:48px;font-size:14px;">
@@ -1593,47 +1600,35 @@ function renderEntryLog() {
     const d = new Date(date + 'T00:00:00');
     const dayLabel = d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
 
-    return `
-    <div style="margin-bottom:20px;">
-      <!-- Day header -->
-      <div style="display:flex;justify-content:space-between;align-items:center;
-        padding:10px 14px;background:var(--surface2);border-radius:10px 10px 0 0;
-        border:1px solid var(--border);border-bottom:none;">
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${dayLabel}</span>
-        <span style="font-size:13px;font-weight:700;color:var(--accent);">${fmt(dayTotal)}</span>
-      </div>
-      <!-- Entries for this day -->
-      <div style="border:1px solid var(--border);border-radius:0 0 10px 10px;overflow:hidden;">
-        ${dayEntries.map((e,i) => {
-          const icon  = (window.MOBILE_CATS||[]).find(c=>c.label===e.cat)?.icon || '📦';
-          const color = getCatColor(e.cat);
-          const isLast = i === dayEntries.length - 1;
-          return `
-          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;
-            background:var(--surface);${isLast?'':'border-bottom:1px solid var(--border);'}
-            transition:background 0.15s;" 
-            onmouseover="this.style.background='var(--surface2)'"
-            onmouseout="this.style.background='var(--surface)'">
-            <div style="width:34px;height:34px;border-radius:9px;background:${color}22;
-              display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${icon}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:500;color:var(--text);">${e.cat}</div>
-              ${e.note ? `<div style="font-size:11px;color:var(--text3);margin-top:1px;">${e.note}</div>` : ''}
-            </div>
-            <div style="font-size:14px;font-weight:600;color:var(--text);margin-right:10px;">${fmt(e.amt)}</div>
-            <div style="display:flex;gap:4px;flex-shrink:0;">
-              <button onclick="openEdit('${e.id}')" title="Edit"
-                style="background:var(--surface2);border:1px solid var(--border);color:var(--blue);
-                cursor:pointer;font-size:13px;padding:5px 8px;border-radius:6px;">✏️</button>
-              <button onclick="removeEntry('${e.id}')" title="Delete"
-                style="background:var(--surface2);border:1px solid var(--border);color:var(--red);
-                cursor:pointer;font-size:13px;padding:5px 8px;border-radius:6px;">🗑</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
+    const html = buildDayCard(date, dayEntries, dayTotal, dayLabel);
+    return html;
   }).join('');
+}
+
+function buildDayCard(date, dayEntries, dayTotal, dayLabel) {
+  let entriesHtml = '';
+  for (let i = 0; i < dayEntries.length; i++) {
+    const e = dayEntries[i];
+    const icon  = (window.MOBILE_CATS||[]).find(function(c){return c.label===e.cat;}) ? (window.MOBILE_CATS||[]).find(function(c){return c.label===e.cat;}).icon : '📦';
+    const color = getCatColor(e.cat);
+    const border = i < dayEntries.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    const noteHtml = e.note ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;">' + e.note + '</div>' : '';
+    entriesHtml += '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--surface);' + border + 'transition:background 0.15s;">'
+      + '<div style="width:34px;height:34px;border-radius:9px;background:' + color + '22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">' + icon + '</div>'
+      + '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;color:var(--text);">' + e.cat + '</div>' + noteHtml + '</div>'
+      + '<div style="font-size:14px;font-weight:600;color:var(--text);margin-right:10px;">' + fmt(e.amt) + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0;">'
+      + '<button data-editid="' + e.id + '" title="Edit" style="background:var(--surface2);border:1px solid var(--border);color:var(--blue);cursor:pointer;font-size:13px;padding:5px 8px;border-radius:6px;">✏️</button>'
+      + '<button data-delid="' + e.id + '" title="Delete" style="background:var(--surface2);border:1px solid var(--border);color:var(--red);cursor:pointer;font-size:13px;padding:5px 8px;border-radius:6px;">🗑</button>'
+      + '</div></div>';
+  }
+  return '<div style="margin-bottom:20px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom:none;">'
+    + '<span style="font-size:13px;font-weight:600;color:var(--text);">' + dayLabel + '</span>'
+    + '<span style="font-size:13px;font-weight:700;color:var(--accent);">' + fmt(dayTotal) + '</span>'
+    + '</div>'
+    + '<div style="border:1px solid var(--border);border-radius:0 0 10px 10px;overflow:hidden;">' + entriesHtml + '</div>'
+    + '</div>';
 }
 
 function getCatColor(cat) {
