@@ -641,20 +641,17 @@ window.setSyncStatus = setSyncStatus;
   <div class="two-col">
     <div class="chart-card">
       <h3>Monthly Income vs Expenses</h3>
-      <canvas id="barCanvas" width="600" height="200"></canvas>
+      <div id="barChart" style="width:100%;"></div>
     </div>
     <div class="chart-card">
       <h3>Savings Trend</h3>
-      <canvas id="savingsCanvas" width="600" height="200"></canvas>
+      <div id="savingsChart" style="width:100%;"></div>
     </div>
   </div>
   <div class="two-col">
     <div class="chart-card">
       <h3>Category Breakdown (Selected Year)</h3>
-      <div style="display:flex;gap:24px;align-items:center;min-height:160px;">
-        <canvas id="donutCanvas" width="160" height="160" style="flex-shrink:0;"></canvas>
-        <div class="pie-legend" id="pieLegend" style="flex:1;"></div>
-      </div>
+      <div id="catBreakdown" style="width:100%;"></div>
     </div>
     <div class="savings-meter chart-card">
       <h3>Savings Rate Tracker</h3>
@@ -669,7 +666,7 @@ window.setSyncStatus = setSyncStatus;
   <div class="cards" id="monthly-cards"></div>
   <div class="chart-card" style="margin-bottom:20px;">
     <h3>Daily Spending This Month</h3>
-    <canvas id="dailyCanvas" width="1000" height="160"></canvas>
+    <div id="dailyChart" style="width:100%;"></div>
   </div>
   <div class="chart-card">
     <h3>Expense Breakdown</h3>
@@ -708,7 +705,7 @@ window.setSyncStatus = setSyncStatus;
   <div class="cards" id="cat-cards"></div>
   <div class="chart-card" style="margin-bottom:20px;">
     <h3>Category Trend Across Months</h3>
-    <canvas id="catTrendCanvas" width="1000" height="200"></canvas>
+    <div id="catTrendChart" style="width:100%;overflow-x:auto;"></div>
   </div>
 </div>
 
@@ -994,194 +991,154 @@ function renderOverview() {
   drawSavingsMeters(yd);
 }
 
+// ══ PURE HTML CHARTS (no canvas — always renders) ═══════════════════
+
 function drawBarChart(yd) {
-  const canvas = document.getElementById('barCanvas');
-  if (!canvas || !canvas.parentElement) return;
-  const dpr = window.devicePixelRatio || 1;
-  const W = Math.max(canvas.parentElement.clientWidth - 40, 200);
-  const H = 180;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  canvas.style.width = W+'px'; canvas.style.height = H+'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  
-  const maxVal = Math.max(...yd.map(([,d]) => Math.max(d.salary, d.expenses)));
-  const pad = {l:40,r:10,t:10,b:30};
-  const chartH = H - pad.t - pad.b;
-  const bw = (W - pad.l - pad.r) / yd.length;
-  
-  ctx.fillStyle = '#1e2030';
-  ctx.fillRect(0, 0, W, H);
-  
-  // gridlines
-  for (let i=0;i<=4;i++) {
-    const y = pad.t + chartH*(1-i/4);
-    ctx.strokeStyle = '#2a2d40'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
-    ctx.fillStyle = '#5a5e72'; ctx.font = '9px DM Sans'; ctx.textAlign = 'right';
-    ctx.fillText('€'+(maxVal*i/4/1000).toFixed(1)+'k', pad.l-4, y+3);
-  }
-  
-  yd.forEach(([key, d], i) => {
-    const x = pad.l + i*bw;
-    const iH = (d.salary/maxVal)*chartH;
-    const eH = (d.expenses/maxVal)*chartH;
-    const sH = (d.savings/maxVal)*chartH;
-    
-    // income bar
-    ctx.fillStyle = '#5b9bd540';
-    ctx.fillRect(x+4, pad.t+chartH-iH, bw*0.35, iH);
-    // expense bar
-    ctx.fillStyle = '#e05c5c80';
-    ctx.fillRect(x+bw*0.35+4, pad.t+chartH-eH, bw*0.35, eH);
-    // savings bar
-    ctx.fillStyle = '#4caf8c80';
-    ctx.fillRect(x+bw*0.70+4, pad.t+chartH-sH, bw*0.25-4, sH);
-    
-    // label
-    const mn = key.split('-')[1];
-    ctx.fillStyle = '#5a5e72'; ctx.font = '9px DM Sans'; ctx.textAlign = 'center';
-    ctx.fillText(MONTH_NAMES[parseInt(mn)-1], x+bw/2, H-pad.b+12);
-  });
-  
-  // legend
-  const items = [['Income','#5b9bd5'],['Expenses','#e05c5c'],['Savings','#4caf8c']];
-  items.forEach(([l,c],i) => {
-    ctx.fillStyle = c; ctx.fillRect(pad.l + i*80, H-10, 8, 8);
-    ctx.fillStyle = '#8b8fa8'; ctx.font = '10px DM Sans'; ctx.textAlign = 'left';
-    ctx.fillText(l, pad.l + i*80 + 12, H-3);
-  });
+  const el = document.getElementById('barChart');
+  if (!el) return;
+  const maxVal = Math.max(...yd.map(([,d]) => Math.max(fmtN(d.salary), fmtN(d.expenses), 1)));
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:4px;height:160px;padding:0 0 24px;">
+      ${yd.map(([key,d]) => {
+        const mn = MONTH_NAMES[parseInt(key.split('-')[1])-1];
+        const iH = Math.max((fmtN(d.salary)/maxVal)*120, 2);
+        const eH = Math.max((fmtN(d.expenses)/maxVal)*120, 2);
+        const sH = Math.max((fmtN(d.savings)/maxVal)*120, 1);
+        return `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;">
+          <div style="width:100%;display:flex;align-items:flex-end;gap:1px;height:120px;">
+            <div style="flex:1;height:${iH}px;background:#5b9bd560;border-radius:3px 3px 0 0;" title="Income ${fmt(d.salary)}"></div>
+            <div style="flex:1;height:${eH}px;background:#e05c5c70;border-radius:3px 3px 0 0;" title="Expenses ${fmt(d.expenses)}"></div>
+            <div style="flex:1;height:${Math.max(sH,1)}px;background:${fmtN(d.savings)>=0?'#4caf8c70':'#e05c5c70'};border-radius:3px 3px 0 0;" title="Savings ${fmt(d.savings)}"></div>
+          </div>
+          <span style="font-size:9px;color:var(--text3);position:absolute;bottom:0;">${mn}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:16px;justify-content:center;margin-top:4px;">
+      <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">
+        <div style="width:10px;height:10px;background:#5b9bd5;border-radius:2px;"></div>Income</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">
+        <div style="width:10px;height:10px;background:#e05c5c;border-radius:2px;"></div>Expenses</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">
+        <div style="width:10px;height:10px;background:#4caf8c;border-radius:2px;"></div>Savings</div>
+    </div>`;
 }
 
 function drawSavingsLine(yd) {
-  const canvas = document.getElementById('savingsCanvas');
-  if (!canvas || !canvas.parentElement) return;
-  const dpr = window.devicePixelRatio||1;
-  const W = Math.max(canvas.parentElement.clientWidth - 40, 200);
-  const H = 180;
-  canvas.width = W*dpr; canvas.height = H*dpr;
-  canvas.style.width = W+'px'; canvas.style.height = H+'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.fillStyle='#1e2030'; ctx.fillRect(0,0,W,H);
-  
-  const vals = yd.map(([,d])=>d.savings);
-  const rates = yd.map(([,d])=>d.salary>0?(d.savings/d.salary*100):0);
-  const maxV = Math.max(...vals)*1.1;
-  const pad={l:40,r:10,t:10,b:30};
-  const chartH = H-pad.t-pad.b;
-  const step = (W-pad.l-pad.r)/(yd.length-1||1);
-  
-  // grid
-  for(let i=0;i<=4;i++){
-    const y=pad.t+chartH*(1-i/4);
-    ctx.strokeStyle='#2a2d40'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
-    ctx.fillStyle='#5a5e72'; ctx.font='9px DM Sans'; ctx.textAlign='right';
-    ctx.fillText('€'+(maxV*i/4/1000).toFixed(1)+'k',pad.l-4,y+3);
-  }
-  
-  // area fill
-  ctx.beginPath();
-  ctx.moveTo(pad.l, pad.t+chartH-(vals[0]/maxV)*chartH);
-  vals.forEach((v,i)=>{ ctx.lineTo(pad.l+i*step, pad.t+chartH-(v/maxV)*chartH); });
-  ctx.lineTo(pad.l+(vals.length-1)*step, pad.t+chartH);
-  ctx.lineTo(pad.l, pad.t+chartH);
-  ctx.closePath();
-  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+chartH);
-  grad.addColorStop(0,'#4caf8c40'); grad.addColorStop(1,'#4caf8c05');
-  ctx.fillStyle=grad; ctx.fill();
-  
-  // line
-  ctx.beginPath();
-  vals.forEach((v,i)=>{
-    const x=pad.l+i*step, y=pad.t+chartH-(v/maxV)*chartH;
-    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  });
-  ctx.strokeStyle='#4caf8c'; ctx.lineWidth=2; ctx.stroke();
-  
-  // dots
-  vals.forEach((v,i)=>{
-    const x=pad.l+i*step, y=pad.t+chartH-(v/maxV)*chartH;
-    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
-    ctx.fillStyle='#4caf8c'; ctx.fill();
-    ctx.fillStyle='#5a5e72'; ctx.font='9px DM Sans'; ctx.textAlign='center';
-    ctx.fillText(MONTH_NAMES[parseInt(yd[i][0].split('-')[1])-1],x,H-pad.b+12);
-  });
+  const el = document.getElementById('savingsChart');
+  if (!el) return;
+  const vals = yd.map(([,d]) => fmtN(d.savings));
+  const maxV = Math.max(...vals, 1);
+  const minV = Math.min(...vals, 0);
+  const range = maxV - minV || 1;
+  const H = 120;
+  const W = 100; // percentage-based
+  const pts = vals.map((v,i) => {
+    const x = yd.length > 1 ? (i / (yd.length-1)) * 100 : 50;
+    const y = H - ((v - minV) / range) * (H - 10) - 5;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const areaPath = vals.map((v,i) => {
+    const x = yd.length > 1 ? (i / (yd.length-1)) * 100 : 50;
+    const y = H - ((v - minV) / range) * (H - 10) - 5;
+    return `${i===0?'M':'L'}${x} ${y}`;
+  }).join(' ') + ` L100 ${H} L0 ${H} Z`;
+
+  el.innerHTML = `
+    <div style="position:relative;height:${H+28}px;width:100%;">
+      <svg viewBox="0 0 100 ${H}" preserveAspectRatio="none"
+        style="position:absolute;top:0;left:0;width:100%;height:${H}px;">
+        <defs>
+          <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4caf8c" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#4caf8c" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#sg)"/>
+        <polyline points="${pts}" fill="none" stroke="#4caf8c" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+        ${vals.map((v,i) => {
+          const x = yd.length > 1 ? (i / (yd.length-1)) * 100 : 50;
+          const y = H - ((v - minV) / range) * (H - 10) - 5;
+          return `<circle cx="${x}" cy="${y}" r="1.5" fill="#4caf8c" vector-effect="non-scaling-stroke"/>`;
+        }).join('')}
+      </svg>
+      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;padding:0 2px;">
+        ${yd.map(([key]) => `<span style="font-size:9px;color:var(--text3);">${MONTH_NAMES[parseInt(key.split('-')[1])-1]}</span>`).join('')}
+      </div>
+    </div>`;
 }
 
 function drawDonut(yd) {
-  // aggregate all categories for year
+  const el = document.getElementById('catBreakdown');
+  if (!el) return;
   const totals = {};
-  yd.forEach(([,d])=>{
-    if(!d.cat) return;
-    Object.entries(d.cat).forEach(([k,v])=>{ totals[k]=(totals[k]||0)+fmtN(v); });
+  yd.forEach(([,d]) => {
+    if (!d.cat) return;
+    Object.entries(d.cat).forEach(([k,v]) => { totals[k] = (totals[k]||0) + fmtN(v); });
   });
-  const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  const total = sorted.reduce((s,[,v])=>s+v,0);
-  
-  const canvas = document.getElementById('donutCanvas');
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio||1;
-  canvas.width=160*dpr; canvas.height=160*dpr;
-  canvas.style.width='160px'; canvas.style.height='160px';
-  ctx.scale(dpr,dpr);
-  
+  const sorted = Object.entries(totals).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const total  = sorted.reduce((s,[,v])=>s+v, 0) || 1;
+
+  // Build SVG donut
   let angle = -Math.PI/2;
-  const cx=80,cy=80,r=68,inner=44;
-  sorted.forEach(([k,v],i)=>{
+  const cx=60, cy=60, r=52, inner=34;
+  const slices = sorted.map(([k,v],i) => {
     const slice = (v/total)*Math.PI*2;
-    ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.arc(cx,cy,r,angle,angle+slice);
-    ctx.closePath();
-    ctx.fillStyle = CAT_COLORS[i];
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx,cy,inner,0,Math.PI*2);
-    ctx.fillStyle='#161820'; ctx.fill();
-    angle+=slice;
-  });
-  
-  ctx.fillStyle='#e4e6f0'; ctx.font='bold 14px DM Sans'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(fmt(total).replace('€',''), cx, cy-6);
-  ctx.fillStyle='#5a5e72'; ctx.font='10px DM Sans';
-  ctx.fillText('Total', cx, cy+10);
-  
-  // legend
-  const leg = document.getElementById('pieLegend');
-  leg.innerHTML = sorted.map(([k,v],i)=>`
-    <div class="legend-item">
-      <div class="legend-dot" style="background:${CAT_COLORS[i]}"></div>
-      <div class="legend-label">${k}</div>
-      <div class="legend-value">${fmt(v)}</div>
-      <div class="legend-pct">${(v/total*100).toFixed(0)}%</div>
-    </div>`).join('');
+    const x1=cx+r*Math.cos(angle), y1=cy+r*Math.sin(angle);
+    angle += slice;
+    const x2=cx+r*Math.cos(angle), y2=cy+r*Math.sin(angle);
+    const lg = slice > Math.PI ? 1 : 0;
+    const xi1=cx+inner*Math.cos(angle-slice), yi1=cy+inner*Math.sin(angle-slice);
+    const xi2=cx+inner*Math.cos(angle), yi2=cy+inner*Math.sin(angle);
+    return `<path d="M${x1.toFixed(2)} ${y1.toFixed(2)} A${r} ${r} 0 ${lg} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L${xi2.toFixed(2)} ${yi2.toFixed(2)} A${inner} ${inner} 0 ${lg} 0 ${xi1.toFixed(2)} ${yi1.toFixed(2)} Z" fill="${CAT_COLORS[i]}" opacity="0.85"/>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+      <svg viewBox="0 0 120 120" style="width:120px;height:120px;flex-shrink:0;">
+        ${slices}
+        <circle cx="${cx}" cy="${cy}" r="${inner}" fill="var(--surface)"/>
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--text)" font-size="9" font-weight="bold">${fmt(total).replace('€','€ ')}</text>
+        <text x="${cx}" y="${cy+10}" text-anchor="middle" fill="var(--text3)" font-size="7">Total</text>
+      </svg>
+      <div style="flex:1;min-width:160px;">
+        ${sorted.map(([k,v],i) => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+          <div style="width:10px;height:10px;border-radius:2px;background:${CAT_COLORS[i]};flex-shrink:0;"></div>
+          <div style="flex:1;font-size:12px;color:var(--text2);">${k}</div>
+          <div style="font-size:12px;color:var(--text);font-weight:500;">${fmt(v)}</div>
+          <div style="font-size:11px;color:var(--text3);width:32px;text-align:right;">${(v/total*100).toFixed(0)}%</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
 }
 
 function drawSavingsMeters(yd) {
   const last3 = yd.slice(-3).reverse();
-  document.getElementById('savings-meters').innerHTML = last3.map(([key,d])=>{
-    const rate = d.salary>0?(d.savings/d.salary*100):0;
-    const mn = MONTH_NAMES[parseInt(key.split('-')[1])-1];
+  document.getElementById('savings-meters').innerHTML = last3.map(([key,d]) => {
+    const rate  = d.salary>0 ? (d.savings/d.salary*100) : 0;
+    const mn    = MONTH_NAMES[parseInt(key.split('-')[1])-1];
     const color = rate>=30?'var(--green)':rate>=15?'var(--accent)':'var(--red)';
     return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:13px;color:var(--text)">${mn} ${key.split('-')[0]}</span>
-          <span style="font-size:13px;font-weight:600;color:${color}">${rate.toFixed(1)}% saved</span>
-        </div>
-        <div class="meter-track">
-          <div class="meter-fill" style="width:${Math.min(rate,100)}%;background:${color};"></div>
-        </div>
-        <div class="meter-labels">
-          <span>${fmt(d.expenses)} spent</span>
-          <span>${fmt(d.savings)} saved</span>
-        </div>
-      </div>`;
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--text)">${mn} ${key.split('-')[0]}</span>
+        <span style="font-size:13px;font-weight:600;color:${color}">${rate.toFixed(1)}% saved</span>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;height:10px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(Math.max(rate,0),100)}%;background:${color};border-radius:8px;transition:width 0.6s ease;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:4px;">
+        <span>${fmt(d.expenses)} spent</span>
+        <span>${fmt(d.savings)} saved</span>
+      </div>
+    </div>`;
   }).join('');
 }
 
+// ── MONTHLY DETAIL ───────────────────────────
 // ── MONTHLY DETAIL ───────────────────────────
 function renderMonthly() {
   const months = Object.keys(DATA).sort().reverse();
@@ -1240,44 +1197,40 @@ function updateMonthView() {
 }
 
 function drawDailyChart() {
-  const canvas = document.getElementById('dailyCanvas');
-  const dpr = window.devicePixelRatio||1;
-  const W = canvas.parentElement.clientWidth-40;
-  const H = 140;
-  canvas.width=W*dpr; canvas.height=H*dpr;
-  canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.fillStyle='#1e2030'; ctx.fillRect(0,0,W,H);
-  
+  const el = document.getElementById('dailyChart');
+  if (!el) return;
   const d = DATA[currentMonth];
-  if(!d?.cat) return;
-  
-  // simulate daily data from category totals (distributed across days)
-  const days = currentMonth.startsWith('2024-02')||currentMonth.startsWith('2025-02')||currentMonth.startsWith('2026-02') ? 28 : [4,6,9,11].includes(parseInt(currentMonth.split('-')[1])) ? 30 : 31;
-  const dailyTotal = d.expenses / days;
-  const noise = () => (Math.random()-0.5)*dailyTotal*0.8;
-  const vals = Array.from({length:days},(_,i)=>Math.max(0,dailyTotal+noise()));
-  const maxV = Math.max(...vals)*1.1;
-  const bw = (W-40)/days;
-  const pad={l:40,t:8,b:20};
-  const chartH=H-pad.t-pad.b;
-  
-  vals.forEach((v,i)=>{
-    const bh=(v/maxV)*chartH;
-    const intensity = v/maxV;
-    ctx.fillStyle = `rgba(201,168,76,${0.3+intensity*0.5})`;
-    ctx.fillRect(40+i*bw+1, pad.t+chartH-bh, bw-2, bh);
+  if (!d?.cat) { el.innerHTML = '<div style="color:var(--text3);text-align:center;padding:24px;">No data</div>'; return; }
+
+  // Get actual daily entries from loadEntries()
+  const entries = loadEntries();
+  const monthEntries = entries.filter(e => e.date && e.date.startsWith(currentMonth));
+
+  // Group by day
+  const byDay = {};
+  monthEntries.forEach(e => {
+    const day = parseInt(e.date.split('-')[2]);
+    byDay[day] = (byDay[day]||0) + e.amt;
   });
-  
-  // axes
-  ctx.fillStyle='#5a5e72'; ctx.font='9px DM Sans'; ctx.textAlign='center';
-  [1,8,15,22,days].forEach(d=>{
-    ctx.fillText(d, 40+(d-1)*bw+bw/2, H-4);
-  });
-  ctx.textAlign='right';
-  ctx.fillText('€'+maxV.toFixed(0),36,pad.t+12);
-  ctx.fillText('€0',36,H-pad.b+4);
+
+  const days = [2,4,6,9,11].includes(parseInt(currentMonth.split('-')[1])) ? (currentMonth.includes('-02') ? 28 : 30) : 31;
+  const vals = Array.from({length:days}, (_,i) => byDay[i+1]||0);
+  const maxV = Math.max(...vals, 1);
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:2px;height:100px;padding-bottom:20px;position:relative;">
+      ${vals.map((v,i) => {
+        const h = Math.max((v/maxV)*80, v>0?3:0);
+        const day = i+1;
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;" title="Day ${day}: ${fmt(v)}">
+          <div style="width:100%;height:${h}px;background:rgba(201,168,76,${0.3+(v/maxV)*0.6});border-radius:2px 2px 0 0;margin-top:auto;"></div>
+          ${[1,5,10,15,20,25,days].includes(day)?`<span style="position:absolute;bottom:-16px;font-size:8px;color:var(--text3);">${day}</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:8px;">
+      ${Object.keys(byDay).length} days with entries · Total ${fmt(Object.values(byDay).reduce((a,b)=>a+b,0))}
+    </div>`;
 }
 
 // ── ANNUAL DASHBOARD ──────────────────────────
@@ -1377,59 +1330,44 @@ function renderCategories() {
 }
 
 function drawCategoryTrend(yd) {
-  const canvas = document.getElementById('catTrendCanvas');
-  const dpr = window.devicePixelRatio||1;
-  const W = canvas.parentElement.clientWidth-40;
-  const H = 200;
-  canvas.width=W*dpr; canvas.height=H*dpr;
-  canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.fillStyle='#1e2030'; ctx.fillRect(0,0,W,H);
-  
+  const el = document.getElementById('catTrendChart');
+  if (!el) return;
   const topCats = ['Grocery','Shopping','Eating Out','Transport','Kids','Insurance'];
-  const pad={l:50,r:120,t:10,b:30};
-  const chartH=H-pad.t-pad.b;
-  const step=(W-pad.l-pad.r)/(yd.length-1||1);
-  
-  const maxV = Math.max(...yd.map(([,d])=>d.cat?Math.max(...topCats.map(c=>fmtN(d.cat[c])||0)):0))*1.1;
-  
-  for(let i=0;i<=4;i++){
-    const y=pad.t+chartH*(1-i/4);
-    ctx.strokeStyle='#2a2d40'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
-    ctx.fillStyle='#5a5e72'; ctx.font='9px DM Sans'; ctx.textAlign='right';
-    ctx.fillText('€'+(maxV*i/4/1000<1?(maxV*i/4).toFixed(0):(maxV*i/4/1000).toFixed(1)+'k'),pad.l-4,y+3);
-  }
-  
-  topCats.forEach((cat,ci)=>{
-    const vals = yd.map(([,d])=>d.cat?fmtN(d.cat[cat]):0);
-    ctx.beginPath();
-    vals.forEach((v,i)=>{
-      const x=pad.l+i*step, y=pad.t+chartH-(v/maxV)*chartH;
-      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-    });
-    ctx.strokeStyle=CAT_COLORS[ci]; ctx.lineWidth=2; ctx.stroke();
-    
-    vals.forEach((v,i)=>{
-      if(v>0){
-        const x=pad.l+i*step, y=pad.t+chartH-(v/maxV)*chartH;
-        ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
-        ctx.fillStyle=CAT_COLORS[ci]; ctx.fill();
-      }
-    });
-    
-    // legend on right
-    const ly = pad.t+20+ci*26;
-    ctx.fillStyle=CAT_COLORS[ci]; ctx.fillRect(W-pad.r+8, ly-6, 12, 8);
-    ctx.fillStyle='#8b8fa8'; ctx.font='10px DM Sans'; ctx.textAlign='left';
-    ctx.fillText(cat, W-pad.r+24, ly+2);
-  });
-  
-  yd.forEach(([key],i)=>{
-    ctx.fillStyle='#5a5e72'; ctx.font='9px DM Sans'; ctx.textAlign='center';
-    ctx.fillText(MONTH_NAMES[parseInt(key.split('-')[1])-1], pad.l+i*step, H-pad.b+12);
-  });
+  const H = 140;
+  const maxV = Math.max(...yd.flatMap(([,d]) => topCats.map(cat => fmtN(d.cat?.[cat])||0)), 1);
+
+  const lines = topCats.map((cat,ci) => {
+    const vals = yd.map(([,d]) => fmtN(d.cat?.[cat])||0);
+    const pts = vals.map((v,i) => {
+      const x = yd.length>1 ? (i/(yd.length-1))*100 : 50;
+      const y = H - (v/maxV)*(H-10) - 5;
+      return `${x},${y}`;
+    }).join(' ');
+    const dots = vals.map((v,i) => {
+      if (!v) return '';
+      const x = yd.length>1 ? (i/(yd.length-1))*100 : 50;
+      const y = H - (v/maxV)*(H-10) - 5;
+      return `<circle cx="${x}" cy="${y}" r="1.8" fill="${CAT_COLORS[ci]}" vector-effect="non-scaling-stroke"/>`;
+    }).join('');
+    return `<polyline points="${pts}" fill="none" stroke="${CAT_COLORS[ci]}" stroke-width="0.8" vector-effect="non-scaling-stroke" opacity="0.9"/>${dots}`;
+  }).join('');
+
+  const monthLabels = yd.map(([key],i) => {
+    const pct = yd.length>1 ? (i/(yd.length-1))*100 : 50;
+    return `<div style="position:absolute;left:${pct}%;transform:translateX(-50%);font-size:9px;color:var(--text3);">${MONTH_NAMES[parseInt(key.split('-')[1])-1]}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="position:relative;">
+      <svg viewBox="0 0 100 ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;">${lines}</svg>
+      <div style="position:relative;height:18px;">${monthLabels}</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
+      ${topCats.map((cat,i)=>`
+      <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">
+        <div style="width:20px;height:2px;background:${CAT_COLORS[i]};border-radius:1px;"></div>${cat}
+      </div>`).join('')}
+    </div>`;
 }
 
 // ── ENTRY LOG ─────────────────────────────────
