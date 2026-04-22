@@ -63,13 +63,8 @@ onAuthStateChanged(auth, user => {
     document.getElementById('userAvatar').src  = user.photoURL || '';
     document.getElementById('userName').textContent = user.displayName || user.email;
     setSyncStatus('connecting');
-    // Trigger a render after app shell is visible so charts size correctly
-    setTimeout(() => {
-      if (window._appReady) {
-        window.renderYearTabs();
-        window.renderOverview();
-      }
-    }, 300);
+    // Signal to main script that user is now signed in
+    window._userSignedIn = true;
 
     const uid = user.uid;
     const entriesRef  = collection(db, 'users', uid, 'entries');
@@ -1001,8 +996,9 @@ function renderOverview() {
 
 function drawBarChart(yd) {
   const canvas = document.getElementById('barCanvas');
+  if (!canvas || !canvas.parentElement) return;
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.parentElement.clientWidth - 40;
+  const W = Math.max(canvas.parentElement.clientWidth - 40, 200);
   const H = 180;
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
@@ -1059,8 +1055,9 @@ function drawBarChart(yd) {
 
 function drawSavingsLine(yd) {
   const canvas = document.getElementById('savingsCanvas');
+  if (!canvas || !canvas.parentElement) return;
   const dpr = window.devicePixelRatio||1;
-  const W = canvas.parentElement.clientWidth - 40;
+  const W = Math.max(canvas.parentElement.clientWidth - 40, 200);
   const H = 180;
   canvas.width = W*dpr; canvas.height = H*dpr;
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
@@ -1725,36 +1722,30 @@ function refreshAllViews() {
 document.getElementById('editModal').addEventListener('click', function(e){ if(e.target===this) closeEdit(); });
 
 // ── INIT ──────────────────────────────────────
-window.DATA = DATA; // expose for Firebase listener
-window.applyEntryToDATA = applyEntryToDATA;
-window.populateFilterMonth = populateFilterMonth;
-window.renderEntryLog = renderEntryLog;
-window.renderYearTabs = renderYearTabs;
-window.refreshAllViews = refreshAllViews;
-window._appReady = false;
+// Expose functions for Firebase module to call
+window.DATA               = DATA;
+window.applyEntryToDATA   = applyEntryToDATA;
+window.populateFilterMonth= populateFilterMonth;
+window.renderEntryLog     = renderEntryLog;
+window.renderYearTabs     = renderYearTabs;
+window.refreshAllViews    = refreshAllViews;
+window._appReady          = false;
 
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
-// Snapshot base DATA before any entries applied
+
+// Save a clean copy of the hardcoded historical DATA
 window._baseDATA = JSON.parse(JSON.stringify(DATA));
 
-// Restore localStorage fallback (used if Firebase not configured)
+// Restore any locally cached entries (fallback when Firebase not available)
 rebuildDATA();
 const _savedSalaries = JSON.parse(localStorage.getItem('paris_salaries')||'{}');
 Object.entries(_savedSalaries).forEach(([key,sal])=>{
   if(DATA[key]){DATA[key].salary=sal;DATA[key].savings=sal-DATA[key].expenses;}
 });
 
-currentMonth = Object.keys(DATA).sort().reverse()[0];
-currentYear = parseInt(currentMonth.split('-')[0]);
-renderYearTabs();
-renderOverview();
-populateFilterMonth();
-renderEntryLog();
-window._appReady = true;
-
-// If Firebase snapshots already arrived before init finished, render now
-if (window._pendingEntriesRender || window._pendingSalariesRender) {
-  // Reapply remote data that arrived early
+// ── Main render function called once app shell is visible ─────────────
+function doFullRender() {
+  // Apply any remote Firebase data that arrived before we were ready
   if (window._remoteEntries && window._baseDATA) {
     window.DATA = JSON.parse(JSON.stringify(window._baseDATA));
     window._remoteEntries.forEach(e => applyEntryToDATA(e, 1));
@@ -1764,12 +1755,38 @@ if (window._pendingEntriesRender || window._pendingSalariesRender) {
       if (DATA[key]) { DATA[key].salary = sal; DATA[key].savings = sal - DATA[key].expenses; }
     });
   }
-  populateFilterMonth();
-  renderEntryLog();
+  currentMonth = Object.keys(DATA).sort().reverse()[0];
+  currentYear  = parseInt(currentMonth.split('-')[0]);
   renderYearTabs();
   renderOverview();
-  window._pendingEntriesRender = false;
+  populateFilterMonth();
+  renderEntryLog();
+  window._pendingEntriesRender  = false;
   window._pendingSalariesRender = false;
+}
+
+window._appReady = true;
+
+// Watch for appShell becoming visible (happens after Google sign-in)
+// This is more reliable than setTimeout because it fires exactly when
+// the DOM is shown, not after an arbitrary delay
+const _shellObserver = new MutationObserver(() => {
+  const shell = document.getElementById('appShell');
+  if (shell && shell.style.display !== 'none') {
+    _shellObserver.disconnect();
+    // Small rAF delay so browser has painted the layout (gives canvas real width)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      doFullRender();
+    }));
+  }
+});
+_shellObserver.observe(document.getElementById('appShell'), {
+  attributes: true, attributeFilter: ['style']
+});
+
+// Also handle pending snapshots that arrived before sign-in
+if (window._pendingEntriesRender || window._pendingSalariesRender) {
+  doFullRender();
 }
 // Sync status shown via Firebase auth listener
 
