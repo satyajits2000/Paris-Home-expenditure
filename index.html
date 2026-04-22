@@ -63,6 +63,13 @@ onAuthStateChanged(auth, user => {
     document.getElementById('userAvatar').src  = user.photoURL || '';
     document.getElementById('userName').textContent = user.displayName || user.email;
     setSyncStatus('connecting');
+    // Trigger a render after app shell is visible so charts size correctly
+    setTimeout(() => {
+      if (window._appReady) {
+        window.renderYearTabs();
+        window.renderOverview();
+      }
+    }, 300);
 
     const uid = user.uid;
     const entriesRef  = collection(db, 'users', uid, 'entries');
@@ -95,11 +102,15 @@ onAuthStateChanged(auth, user => {
           if (window.DATA[key]) { window.DATA[key].salary = sal; window.DATA[key].savings = sal - window.DATA[key].expenses; }
         });
       }
+      // Render now if app is ready, otherwise mark pending so init can pick it up
       if (window._appReady) {
         window.populateFilterMonth();
         window.renderEntryLog();
         window.renderYearTabs();
         window.refreshAllViews();
+        setSyncStatus('synced');
+      } else {
+        window._pendingEntriesRender = true;
         setSyncStatus('synced');
       }
     });
@@ -114,6 +125,7 @@ onAuthStateChanged(auth, user => {
         if (window.DATA[key]) { window.DATA[key].salary = sal; window.DATA[key].savings = sal - window.DATA[key].expenses; }
       });
       if (window._appReady) window.refreshAllViews();
+      else window._pendingSalariesRender = true;
     });
 
   } else {
@@ -1739,6 +1751,26 @@ renderOverview();
 populateFilterMonth();
 renderEntryLog();
 window._appReady = true;
+
+// If Firebase snapshots already arrived before init finished, render now
+if (window._pendingEntriesRender || window._pendingSalariesRender) {
+  // Reapply remote data that arrived early
+  if (window._remoteEntries && window._baseDATA) {
+    window.DATA = JSON.parse(JSON.stringify(window._baseDATA));
+    window._remoteEntries.forEach(e => applyEntryToDATA(e, 1));
+  }
+  if (window._remoteSalaries) {
+    Object.entries(window._remoteSalaries).forEach(([key, sal]) => {
+      if (DATA[key]) { DATA[key].salary = sal; DATA[key].savings = sal - DATA[key].expenses; }
+    });
+  }
+  populateFilterMonth();
+  renderEntryLog();
+  renderYearTabs();
+  renderOverview();
+  window._pendingEntriesRender = false;
+  window._pendingSalariesRender = false;
+}
 // Sync status shown via Firebase auth listener
 
 window.addEventListener('resize', ()=>{
