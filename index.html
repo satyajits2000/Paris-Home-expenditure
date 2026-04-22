@@ -966,7 +966,6 @@ function setYear(y) {
 // ── OVERVIEW ──────────────────────────────────
 function renderOverview() {
   const yd = getYearData(currentYear);
-  console.log('renderOverview: currentYear='+currentYear+' yd.length='+yd.length+' DATA keys='+Object.keys(DATA).length);
   if (!yd.length) return;
   const totalIncome = yd.reduce((s,[,d]) => s+fmtN(d.salary),0);
   const totalExp = yd.reduce((s,[,d]) => s+fmtN(d.expenses),0);
@@ -1611,7 +1610,7 @@ function renderEntryLog() {
           const isLast = i === dayEntries.length - 1;
           return `
           <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;
-            background:var(--surface);${isLast?'':'border-bottom:1px solid var(--border);}
+            background:var(--surface);${isLast?'':'border-bottom:1px solid var(--border);'}
             transition:background 0.15s;" 
             onmouseover="this.style.background='var(--surface2)'"
             onmouseout="this.style.background='var(--surface)'">
@@ -1709,12 +1708,7 @@ window.refreshAllViews = function() {
 window._appReady = true;
 
 // ── Initial render with hardcoded data (before Firebase loads) ─────────
-try {
-  window.doFullRender();
-  console.log('✅ doFullRender completed. DATA keys:', Object.keys(DATA).length, 'currentYear:', currentYear);
-} catch(err) {
-  console.error('❌ doFullRender failed:', err);
-}
+window.doFullRender();
 
 // ── Re-render when Firebase delivers data ─────────────────────────────
 // The Firebase onSnapshot callback will call window.doFullRender() directly
