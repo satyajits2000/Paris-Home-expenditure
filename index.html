@@ -873,7 +873,7 @@ const CAT_COLORS = ['#c9a84c','#5b9bd5','#9b7fd4','#4caf8c','#e07b5c',
                     '#e05c8c','#5cb8e0','#e0c55c','#8be05c','#c05ce0','#e08b5c','#5ce0b8'];
 
 // monthKey → category totals
-const DATA = {
+let DATA = {
   "2024-08": {salary:5673.26, expenses:3235.43, savings:2437.83,
     cat:{Grocery:745.04,Shopping:18,Transport:134.86,Mobile:61.99,Kids:26.5,Insurance:246.38,Entertainment:30.99,"Eating Out":110.5,"Office Canteen":105,Misc:220.92,"Rent+Electricity":1535.25}},
   "2024-09": {salary:4904.71, expenses:3829.73, savings:1074.98,
@@ -966,6 +966,7 @@ function setYear(y) {
 // ── OVERVIEW ──────────────────────────────────
 function renderOverview() {
   const yd = getYearData(currentYear);
+  console.log('renderOverview: currentYear='+currentYear+' yd.length='+yd.length+' DATA keys='+Object.keys(DATA).length);
   if (!yd.length) return;
   const totalIncome = yd.reduce((s,[,d]) => s+fmtN(d.salary),0);
   const totalExp = yd.reduce((s,[,d]) => s+fmtN(d.expenses),0);
@@ -1385,6 +1386,7 @@ function saveEntries(entries) {
 function rebuildDATA() {
   if(!window._baseDATA) window._baseDATA = JSON.parse(JSON.stringify(DATA));
   DATA = JSON.parse(JSON.stringify(window._baseDATA));
+  window.DATA = DATA;
   const entries = loadEntries();
   entries.forEach(e => applyEntryToDATA(e, 1));
 }
@@ -1669,9 +1671,9 @@ window._baseDATA = JSON.parse(JSON.stringify(DATA));
 
 // ── THE ONE function that renders everything ───────────────────────────
 window.doFullRender = function() {
-  // Step 1: reset DATA to historical baseline
-  Object.keys(DATA).forEach(k => delete DATA[k]);
-  Object.assign(DATA, JSON.parse(JSON.stringify(window._baseDATA)));
+  // Step 1: reassign DATA to a fresh copy of the baseline (works because DATA is now let)
+  DATA = JSON.parse(JSON.stringify(window._baseDATA));
+  window.DATA = DATA; // keep window.DATA in sync
 
   // Step 2: apply any Firebase entries on top
   if (window._remoteEntries && window._remoteEntries.length) {
@@ -1707,7 +1709,12 @@ window.refreshAllViews = function() {
 window._appReady = true;
 
 // ── Initial render with hardcoded data (before Firebase loads) ─────────
-window.doFullRender();
+try {
+  window.doFullRender();
+  console.log('✅ doFullRender completed. DATA keys:', Object.keys(DATA).length, 'currentYear:', currentYear);
+} catch(err) {
+  console.error('❌ doFullRender failed:', err);
+}
 
 // ── Re-render when Firebase delivers data ─────────────────────────────
 // The Firebase onSnapshot callback will call window.doFullRender() directly
