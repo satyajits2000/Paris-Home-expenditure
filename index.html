@@ -97,16 +97,10 @@ onAuthStateChanged(auth, user => {
           if (window.DATA[key]) { window.DATA[key].salary = sal; window.DATA[key].savings = sal - window.DATA[key].expenses; }
         });
       }
-      // Render now if app is ready, otherwise mark pending so init can pick it up
-      if (window._appReady) {
-        window.populateFilterMonth();
-        window.renderEntryLog();
-        window.renderYearTabs();
-        window.refreshAllViews();
-        setSyncStatus('synced');
-      } else {
-        window._pendingEntriesRender = true;
-        setSyncStatus('synced');
+      // Always call doFullRender — it's safe to call at any time
+      setSyncStatus('synced');
+      if (window.doFullRender) {
+        window.doFullRender();
       }
     });
 
@@ -119,8 +113,7 @@ onAuthStateChanged(auth, user => {
       Object.entries(sals).forEach(([key, sal]) => {
         if (window.DATA[key]) { window.DATA[key].salary = sal; window.DATA[key].savings = sal - window.DATA[key].expenses; }
       });
-      if (window._appReady) window.refreshAllViews();
-      else window._pendingSalariesRender = true;
+      if (window.doFullRender) window.doFullRender();
     });
 
   } else {
@@ -1659,80 +1652,74 @@ function refreshAllViews() {
 // Close modal on backdrop click
 document.getElementById('editModal').addEventListener('click', function(e){ if(e.target===this) closeEdit(); });
 
-// ── INIT ──────────────────────────────────────
-// Expose functions for Firebase module to call
-window.DATA               = DATA;
-window.applyEntryToDATA   = applyEntryToDATA;
-window.populateFilterMonth= populateFilterMonth;
-window.renderEntryLog     = renderEntryLog;
-window.renderYearTabs     = renderYearTabs;
-window.refreshAllViews    = refreshAllViews;
-window._appReady          = false;
+// ══ INIT ═══════════════════════════════════════════════════════════════
 
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
 
-// Save a clean copy of the hardcoded historical DATA
+// ── Expose everything globally so Firebase module can reach it ─────────
+window.DATA                = DATA;
+window.applyEntryToDATA    = applyEntryToDATA;
+window.populateFilterMonth = populateFilterMonth;
+window.renderEntryLog      = renderEntryLog;
+window.renderYearTabs      = renderYearTabs;
+window.refreshAllViews     = refreshAllViews;
+
+// Save a pristine copy of the hardcoded historical data
 window._baseDATA = JSON.parse(JSON.stringify(DATA));
 
-// Restore any locally cached entries (fallback when Firebase not available)
-rebuildDATA();
-const _savedSalaries = JSON.parse(localStorage.getItem('paris_salaries')||'{}');
-Object.entries(_savedSalaries).forEach(([key,sal])=>{
-  if(DATA[key]){DATA[key].salary=sal;DATA[key].savings=sal-DATA[key].expenses;}
-});
+// ── THE ONE function that renders everything ───────────────────────────
+window.doFullRender = function() {
+  // Step 1: reset DATA to historical baseline
+  Object.keys(DATA).forEach(k => delete DATA[k]);
+  Object.assign(DATA, JSON.parse(JSON.stringify(window._baseDATA)));
 
-// ── Main render function called once app shell is visible ─────────────
-function doFullRender() {
-  // Apply any remote Firebase data that arrived before we were ready
-  if (window._remoteEntries && window._baseDATA) {
-    window.DATA = JSON.parse(JSON.stringify(window._baseDATA));
+  // Step 2: apply any Firebase entries on top
+  if (window._remoteEntries && window._remoteEntries.length) {
     window._remoteEntries.forEach(e => applyEntryToDATA(e, 1));
   }
+
+  // Step 3: apply salary overrides
   if (window._remoteSalaries) {
     Object.entries(window._remoteSalaries).forEach(([key, sal]) => {
       if (DATA[key]) { DATA[key].salary = sal; DATA[key].savings = sal - DATA[key].expenses; }
     });
   }
-  currentMonth = Object.keys(DATA).sort().reverse()[0];
+
+  // Step 4: set current period to most recent
+  const allKeys = Object.keys(DATA).sort();
+  currentMonth = allKeys[allKeys.length - 1];
   currentYear  = parseInt(currentMonth.split('-')[0]);
+
+  // Step 5: render all UI
   renderYearTabs();
   renderOverview();
   populateFilterMonth();
   renderEntryLog();
-  window._pendingEntriesRender  = false;
-  window._pendingSalariesRender = false;
-}
+  if (typeof populateMobileFilterMonth === 'function') populateMobileFilterMonth();
+  if (typeof renderMobileLog === 'function') renderMobileLog();
+};
+
+// ── Called by Firebase module snapshot listener ────────────────────────
+window.refreshAllViews = function() {
+  window.doFullRender();
+};
 
 window._appReady = true;
 
-// Watch for appShell becoming visible (happens after Google sign-in)
-// This is more reliable than setTimeout because it fires exactly when
-// the DOM is shown, not after an arbitrary delay
-const _shellObserver = new MutationObserver(() => {
-  const shell = document.getElementById('appShell');
-  if (shell && shell.style.display !== 'none') {
-    _shellObserver.disconnect();
-    // Small rAF delay so browser has painted the layout (gives canvas real width)
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      doFullRender();
-    }));
-  }
-});
-_shellObserver.observe(document.getElementById('appShell'), {
-  attributes: true, attributeFilter: ['style']
-});
+// ── Initial render with hardcoded data (before Firebase loads) ─────────
+window.doFullRender();
 
-// Also handle pending snapshots that arrived before sign-in
-if (window._pendingEntriesRender || window._pendingSalariesRender) {
-  doFullRender();
-}
-// Sync status shown via Firebase auth listener
+// ── Re-render when Firebase delivers data ─────────────────────────────
+// The Firebase onSnapshot callback will call window.doFullRender() directly
+// via the refreshAllViews alias above. No timing tricks needed.
 
-window.addEventListener('resize', ()=>{
+window.addEventListener('resize', () => {
   const active = document.querySelector('.section.active');
-  if(active.id==='sec-overview') renderOverview();
-  else if(active.id==='sec-monthly') updateMonthView();
-  else if(active.id==='sec-categories') renderCategories();
+  if (active) {
+    if (active.id === 'sec-overview') renderOverview();
+    else if (active.id === 'sec-monthly') updateMonthView();
+    else if (active.id === 'sec-categories') renderCategories();
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════
