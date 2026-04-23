@@ -128,7 +128,20 @@ onAuthStateChanged(auth, user => {
       // Always call doFullRender — it's safe to call at any time
       setSyncStatus('synced');
       if (window.doFullRender) {
-        window.doFullRender();
+        // Show mobile nav if screen is narrow (JS fallback for CSS)
+(function checkMobile() {
+  if (window.innerWidth <= 768) {
+    const nav = document.getElementById('mobileNav');
+    const fab = document.querySelector('.mobile-fab');
+    const tabs = document.querySelector('.tabs');
+    if (nav) nav.style.display = 'flex';
+    if (fab) fab.style.display = 'flex';
+    if (tabs) tabs.style.display = 'none';
+    document.querySelector('.main').style.paddingBottom = '90px';
+  }
+})();
+
+window.doFullRender();
       }
     });
 
@@ -309,11 +322,14 @@ window.setSyncStatus = setSyncStatus;
     .main { padding: 16px; }
   }
 
-  /* ═══ MOBILE (≤ 600px) ═══════════════════════════════════════════════ */
-  @media (max-width: 600px) {
+  /* ═══ MOBILE (≤ 768px) ═══════════════════════════════════════════════ */
+  @media (max-width: 768px) {
 
     /* Hide desktop tab bar on mobile */
     .tabs { display: none; }
+    /* Always show mobile nav on small screens */
+    .mobile-nav { display: flex !important; }
+    .mobile-fab { display: flex !important; }
 
     /* Header compact */
     .header { padding: 12px 16px; }
@@ -594,8 +610,7 @@ window.setSyncStatus = setSyncStatus;
   }
 
   /* Hide mobile elements on desktop */
-  .mobile-nav   { display: none; }
-  .mobile-fab   { display: none; }
+  @media (min-width: 769px) { .mobile-nav { display: none; } .mobile-fab { display: none; } }
   .mobile-sheet-backdrop { display: none; }
   .mobile-recent { display: none; }
 
