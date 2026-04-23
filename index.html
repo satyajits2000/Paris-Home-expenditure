@@ -881,6 +881,12 @@ window.setSyncStatus = setSyncStatus;
       <select id="filterMonth" onchange="renderEntryLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:13px;outline:none;">
         <option value="">All Months</option>
       </select>
+      <button onclick="deleteAllInMonth()" id="deleteMonthBtn"
+        style="background:#e05c5c22;color:var(--red);border:1px solid var(--red);
+        padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;
+        font-family:inherit;white-space:nowrap;display:none;">
+        🗑 Delete All in Month
+      </button>
     </div>
     <div id="dateWiseLog"></div>
   </div>
@@ -956,14 +962,15 @@ let DATA = {
     cat:{Grocery:592.7,Shopping:541.89,Transport:144.94,Mobile:70.24,Kids:4.98,Insurance:157.74,"Eating Out":43.9,Medical:14,"Office Canteen":110,Misc:19.96,"Rent+Electricity":1680.54}},
   "2025-11": {salary:5012.03, expenses:3146.33, savings:1865.70,
     cat:{Grocery:379.03,Shopping:399.8,Transport:138.34,Mobile:70.24,Kids:59.3,Insurance:157.74,"Eating Out":62.4,Medical:0,"Office Canteen":5,Misc:5.3,"Rent+Electricity":1869.18}},
-  "2026-01": {salary:5234.37, expenses:1941.21, savings:2674.93,
-    cat:{Grocery:589.35,Shopping:36.98,Transport:94.44,Mobile:72.96,Kids:81.48,Insurance:160.24,"Eating Out":127.53,Medical:9.5,"Office Canteen":19,Misc:3.85,"Rent+Electricity":1672.63}},
+  "2026-01": {salary:5234.37, expenses:2867.96, savings:2366.41,
+    cat:{Grocery:589.35,Shopping:36.98,Transport:94.44,"Mobile+Internet":72.96,Kids:81.48,Insurance:160.24,"Eating Out":127.53,Medical:9.5,"Office Canteen":19,Miscellaneous:3.85,"Rent+Electricity":1672.63}},
   "2026-02": {salary:4560.56, expenses:2802.37, savings:1758.19,
     cat:{Grocery:419.13,Shopping:197.37,Transport:13.52,Mobile:74.15,Kids:108.64,Insurance:161.38,"Eating Out":54.7,Medical:12,"Office Canteen":49.42,Misc:13,"Rent+Electricity":1699.06}},
-  "2026-03": {salary:4616.14, expenses:1148.54, savings:3467.60,
-    cat:{Grocery:598.11,Shopping:0,Transport:6.96,"Mobile+Internet":72.96,Kids:206.48,Insurance:38.43,"Eating Out":32.15,Medical:9.5,"Office Canteen":58.72,Miscellaneous:13,"Rent+Electricity":106.99,Entertainment:78.2}},
-  "2026-04": {salary:4560.56, expenses:2624.56, savings:1936.0,
-    cat:{Grocery:361.02,Shopping:121.07,Transport:117.84,"Mobile+Internet":0,Kids:123.25,Insurance:161.71,"Eating Out":8.3,Medical:0,"Office Canteen":40.26,Miscellaneous:0,"Rent+Electricity":1691.11}},
+  "2026-03": {salary:4616.14, expenses:3016.79, savings:1599.35,
+    cat:{"Rent+Electricity":1720.48,Grocery:598.11,Kids:206.48,Insurance:198.67,
+    Transport:101.48,Entertainment:78.20,"Mobile+Internet":72.96,
+    "Office Canteen":58.72,"Eating Out":32.15,Miscellaneous:13.00,Medical:9.50}},
+  "2026-04": {salary:4560.56, expenses:0, savings:4560.56, cat:{}},
 };
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1614,6 +1621,9 @@ function renderEntryLog() {
   const search  = (document.getElementById('filterSearch')?.value||'').toLowerCase();
   const catF    = document.getElementById('filterCat')?.value||'';
   const moF     = document.getElementById('filterMonth')?.value||'';
+  // Show delete button only when a specific month is selected
+  const delBtn = document.getElementById('deleteMonthBtn');
+  if (delBtn) delBtn.style.display = moF ? 'block' : 'none';
 
   let filtered = entries.filter(e => {
     if (catF && e.cat !== catF) return false;
@@ -2043,6 +2053,60 @@ function renderMobileLog() {
 // Expose for Firebase listener to call
 window.renderMobileLog = renderMobileLog;
 window.populateMobileFilterMonth = populateMobileFilterMonth;
+
+// ── DELETE ALL ENTRIES IN A MONTH ─────────────────────────────────────
+async function deleteAllInMonth() {
+  const moF = document.getElementById('filterMonth')?.value;
+  if (!moF) { alert('Please select a month first'); return; }
+
+  const entries = loadEntries();
+  const toDelete = entries.filter(e => e.date && e.date.startsWith(moF));
+
+  if (!toDelete.length) { alert('No entries found for ' + moF); return; }
+
+  const mn = MONTH_NAMES[parseInt(moF.split('-')[1])-1];
+  const yr = moF.split('-')[0];
+  if (!confirm('Delete ALL ' + toDelete.length + ' entries for ' + mn + ' ' + yr + '?\n\nThis cannot be undone.')) return;
+
+  const btn = document.getElementById('deleteMonthBtn');
+  btn.textContent = 'Deleting…';
+  btn.disabled = true;
+
+  let deleted = 0;
+  if (window._firebaseReady && window._db && window._remoteEntries) {
+    for (const e of toDelete) {
+      if (e._docId) {
+        try {
+          await window._deleteDoc(window._docRef('entries', e._docId));
+          deleted++;
+        } catch(err) {
+          console.error('Failed to delete', e._docId, err);
+        }
+      }
+    }
+  } else {
+    // localStorage fallback
+    const remaining = entries.filter(e => !e.date.startsWith(moF));
+    saveEntries(remaining);
+    remaining.forEach(e => applyEntryToDATA(e, 1));
+    deleted = toDelete.length;
+  }
+
+  btn.textContent = '✓ Deleted ' + deleted + ' entries';
+  btn.style.background = 'var(--green)22';
+  btn.style.color = 'var(--green)';
+  btn.style.borderColor = 'var(--green)';
+  setTimeout(() => {
+    btn.textContent = '🗑 Delete All in Month';
+    btn.style.background = '#e05c5c22';
+    btn.style.color = 'var(--red)';
+    btn.style.borderColor = 'var(--red)';
+    btn.disabled = false;
+    btn.style.display = 'none';
+    document.getElementById('filterMonth').value = '';
+    renderEntryLog();
+  }, 2000);
+}
 
 // ══════════════════════════════════════════════════════════════════════
 //  ADD SECTION TABS
